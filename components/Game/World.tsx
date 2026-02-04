@@ -35,6 +35,9 @@ const World: React.FC<WorldProps> = ({ gameState, onGameOver, onUpdateScore }) =
   const lastSpawnZ = useRef(0);
   const lastUIUpdate = useRef(0);
   const playerRef = useRef<THREE.Group>(null);
+  
+  // Reference for camera smoothing
+  const cameraTargetX = useRef(0);
 
   useEffect(() => {
     const initialObstacles: ObstacleData[] = [];
@@ -66,11 +69,22 @@ const World: React.FC<WorldProps> = ({ gameState, onGameOver, onUpdateScore }) =
     if (gameState !== GameState.PLAYING) return;
 
     const delta = state.clock.getDelta();
-    // Use fixed step for logic if possible, but here we just smooth out
     speedRef.current = Math.min(speedRef.current + SPEED_INCREMENT, MAX_SPEED);
     distanceRef.current += speedRef.current;
 
-    // Throttle UI score updates to ~10 times per second instead of 60
+    // Camera follow logic: Smoothly follow player lane
+    if (playerRef.current) {
+      const targetX = playerRef.current.position.x * 0.5; // Scale down follow for better feel
+      state.camera.position.x = THREE.MathUtils.lerp(state.camera.position.x, targetX, 0.1);
+      
+      // Slight camera tilt based on lane
+      state.camera.rotation.z = THREE.MathUtils.lerp(state.camera.rotation.z, -playerRef.current.position.x * 0.02, 0.05);
+      
+      // Camera look at point shifted slightly ahead of player
+      state.camera.lookAt(state.camera.position.x, 2, -10);
+    }
+
+    // Throttle UI score updates
     if (state.clock.elapsedTime - lastUIUpdate.current > 0.1) {
       onUpdateScore(distanceRef.current, coinsRef.current);
       lastUIUpdate.current = state.clock.elapsedTime;
@@ -111,97 +125,4 @@ const World: React.FC<WorldProps> = ({ gameState, onGameOver, onUpdateScore }) =
       if (Math.abs(obs.z) < COLLISION_THRESHOLD && obs.lane === pLane) {
         if (obs.type === 'BARRIER' && !pIsSliding) onGameOver(distanceRef.current, coinsRef.current);
         else if (obs.type === 'TRAIN' && pY < 1.5) onGameOver(distanceRef.current, coinsRef.current);
-        else if (obs.type === 'RAMP' && pY < 0.5) onGameOver(distanceRef.current, coinsRef.current);
-      }
-    });
-
-    setActiveCoins(prev => {
-      let hit = false;
-      const remaining = prev.filter(coin => {
-        const isHit = Math.abs(coin.z) < COIN_COLLISION_THRESHOLD && coin.lane === pLane && pY < 2;
-        if (isHit) {
-          coinsRef.current += 1;
-          hit = true;
-          return false;
-        }
-        return true;
-      });
-      return remaining;
-    });
-  };
-
-  return (
-    <group>
-      <Player 
-        ref={playerRef} 
-        onStateChange={setPlayerState} 
-        gameState={gameState} 
-      />
-
-      {Array.from({ length: VISIBLE_SEGMENTS }).map((_, i) => (
-        <TrackSegment 
-          key={i} 
-          position={[0, 0, -i * SEGMENT_LENGTH + trackOffset]} 
-        />
-      ))}
-
-      {obstacles.map(obs => (
-        <ObstacleMesh key={obs.id} data={obs} />
-      ))}
-
-      {activeCoins.map(coin => (
-        <CoinMesh key={coin.id} data={coin} />
-      ))}
-      
-      <Buildings offset={trackOffset} />
-    </group>
-  );
-};
-
-const ObstacleMesh: React.FC<{ data: ObstacleData }> = ({ data }) => {
-  const isTrain = data.type === 'TRAIN';
-  return (
-    <mesh position={[data.lane * LANE_WIDTH, isTrain ? 2 : 0.5, data.z]} castShadow>
-      <boxGeometry args={isTrain ? [LANE_WIDTH * 0.9, 4, 8] : [LANE_WIDTH * 0.8, 1, 0.5]} />
-      <meshStandardMaterial color={isTrain ? '#1e293b' : '#ef4444'} metalness={0.5} roughness={0.5} />
-    </mesh>
-  );
-};
-
-const CoinMesh: React.FC<{ data: CoinData }> = ({ data }) => {
-  const meshRef = useRef<THREE.Mesh>(null);
-  useFrame((state) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y += 0.08;
-      meshRef.current.position.y = 1.2 + Math.sin(state.clock.elapsedTime * 6) * 0.15;
-    }
-  });
-  return (
-    <mesh ref={meshRef} position={[data.lane * LANE_WIDTH, 1.2, data.z]}>
-      <cylinderGeometry args={[0.4, 0.4, 0.08, 12]} />
-      <meshStandardMaterial color="#fbbf24" emissive="#fbbf24" emissiveIntensity={0.2} />
-    </mesh>
-  );
-};
-
-const Buildings: React.FC<{ offset: number }> = ({ offset }) => {
-  // Simple static buildings with fewer meshes
-  return (
-    <group>
-      {Array.from({ length: 6 }).map((_, i) => (
-        <React.Fragment key={i}>
-          <mesh position={[-18, 8, -i * 40 + offset]} receiveShadow>
-             <boxGeometry args={[8, 30, 8]} />
-             <meshStandardMaterial color="#0f172a" />
-          </mesh>
-          <mesh position={[18, 8, -i * 40 + offset]} receiveShadow>
-             <boxGeometry args={[8, 30, 8]} />
-             <meshStandardMaterial color="#0f172a" />
-          </mesh>
-        </React.Fragment>
-      ))}
-    </group>
-  );
-};
-
-export default World;
+        
