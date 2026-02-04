@@ -1,0 +1,5 @@
+{
+  "name": "Neon Runner: Urban Dash",
+  "description": "A high-octane 3D endless runner built with React, Three.js, and Tailwind. Swipe to dodge obstacles, collect coins, and beat your high score in a vibrant, procedural urban environment.",
+  "requestFramePermissions": []
+}
