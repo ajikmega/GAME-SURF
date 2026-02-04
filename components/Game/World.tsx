@@ -40,13 +40,13 @@ const World: React.FC<WorldProps> = ({ gameState, onGameOver, onUpdateScore }) =
   useEffect(() => {
     const initialObstacles: ObstacleData[] = [];
     for (let i = 1; i < 6; i++) {
-      initialObstacles.push(generateRandomObstacle(-i * 30));
+      initialObstacles.push(generateRandomObstacle(-i * 40));
     }
     setObstacles(initialObstacles);
   }, []);
 
   function generateRandomObstacle(z: number): ObstacleData {
-    const types: ObstacleData['type'][] = ['BARRIER', 'TRAIN', 'RAMP'];
+    const types: ObstacleData['type'][] = ['CAR', 'TRUCK', 'RAMP_TRUCK'];
     return {
       id: Math.random().toString(36),
       type: types[Math.floor(Math.random() * types.length)],
@@ -69,7 +69,6 @@ const World: React.FC<WorldProps> = ({ gameState, onGameOver, onUpdateScore }) =
     speedRef.current = Math.min(speedRef.current + SPEED_INCREMENT, MAX_SPEED);
     distanceRef.current += speedRef.current;
 
-    // Camera follow logic: Smoothly follow player lane
     if (playerRef.current) {
       const targetX = playerRef.current.position.x * 0.5;
       state.camera.position.x = THREE.MathUtils.lerp(state.camera.position.x, targetX, 0.1);
@@ -77,7 +76,6 @@ const World: React.FC<WorldProps> = ({ gameState, onGameOver, onUpdateScore }) =
       state.camera.lookAt(state.camera.position.x, 2, -10);
     }
 
-    // Throttle UI score updates
     if (state.clock.elapsedTime - lastUIUpdate.current > 0.1) {
       onUpdateScore(distanceRef.current, coinsRef.current);
       lastUIUpdate.current = state.clock.elapsedTime;
@@ -85,22 +83,20 @@ const World: React.FC<WorldProps> = ({ gameState, onGameOver, onUpdateScore }) =
 
     setTrackOffset((prev) => (prev + speedRef.current) % SEGMENT_LENGTH);
 
-    // Obstacle management
     setObstacles(prev => {
       const filtered = prev.map(obs => ({ ...obs, z: obs.z + speedRef.current }))
                            .filter(obs => obs.z < 20);
       
-      if (distanceRef.current - lastSpawnZ.current > 30) {
+      if (distanceRef.current - lastSpawnZ.current > 40) {
         lastSpawnZ.current = distanceRef.current;
-        const newObs = generateRandomObstacle(-120);
-        const newCoin = generateRandomCoin(-100);
+        const newObs = generateRandomObstacle(-150);
+        const newCoin = generateRandomCoin(-120);
         setActiveCoins(c => [...c.map(cc => ({...cc, z: cc.z + speedRef.current})).filter(cc => cc.z < 10), newCoin]);
         return [...filtered, newObs];
       }
       return filtered;
     });
 
-    // Move coins
     setActiveCoins(prev => 
       prev.map(c => ({ ...c, z: c.z + speedRef.current }))
           .filter(c => c.z < 10)
@@ -112,13 +108,22 @@ const World: React.FC<WorldProps> = ({ gameState, onGameOver, onUpdateScore }) =
   const checkCollisions = () => {
     const pLane = playerState.lane;
     const pY = playerState.y;
-    const pIsSliding = playerState.isSliding;
 
     obstacles.forEach(obs => {
-      if (Math.abs(obs.z) < COLLISION_THRESHOLD && obs.lane === pLane) {
-        if (obs.type === 'BARRIER' && !pIsSliding) onGameOver(distanceRef.current, coinsRef.current);
-        else if (obs.type === 'TRAIN' && pY < 1.5) onGameOver(distanceRef.current, coinsRef.current);
-        else if (obs.type === 'RAMP' && pY < 0.5) onGameOver(distanceRef.current, coinsRef.current);
+      // Adjusted collision boxes for vehicle lengths
+      const collisionRange = obs.type === 'TRUCK' ? 4 : 2;
+      if (Math.abs(obs.z) < collisionRange && obs.lane === pLane) {
+        if (obs.type === 'CAR') {
+          // Can jump over a small car
+          if (pY < 1.2) onGameOver(distanceRef.current, coinsRef.current);
+        } else if (obs.type === 'TRUCK') {
+          // Cannot jump over a semi-truck easily
+          if (pY < 3.5) onGameOver(distanceRef.current, coinsRef.current);
+        } else if (obs.type === 'RAMP_TRUCK') {
+          // Collision only if hitting the cab from the front or missing the ramp
+          // Simplified: ramp allows pass if jumping or already high
+          if (pY < 0.2) onGameOver(distanceRef.current, coinsRef.current);
+        }
       }
     });
 
@@ -168,14 +173,106 @@ const World: React.FC<WorldProps> = ({ gameState, onGameOver, onUpdateScore }) =
   );
 };
 
+const Wheel: React.FC<{ position: [number, number, number] }> = ({ position }) => (
+  <mesh position={position} rotation={[0, 0, Math.PI / 2]}>
+    <cylinderGeometry args={[0.3, 0.3, 0.2, 12]} />
+    <meshStandardMaterial color="#111" roughness={1} />
+  </mesh>
+);
+
 const ObstacleMesh: React.FC<{ data: ObstacleData }> = ({ data }) => {
-  const isTrain = data.type === 'TRAIN';
-  return (
-    <mesh position={[data.lane * LANE_WIDTH, isTrain ? 2 : 0.5, data.z]} castShadow>
-      <boxGeometry args={isTrain ? [LANE_WIDTH * 0.9, 4, 8] : [LANE_WIDTH * 0.8, 1, 0.5]} />
-      <meshStandardMaterial color={isTrain ? '#1e293b' : '#ef4444'} metalness={0.5} roughness={0.5} />
-    </mesh>
-  );
+  const laneX = data.lane * LANE_WIDTH;
+
+  if (data.type === 'CAR') {
+    return (
+      <group position={[laneX, 0, data.z]}>
+        {/* Body */}
+        <mesh position={[0, 0.5, 0]} castShadow>
+          <boxGeometry args={[1.8, 0.6, 3]} />
+          <meshStandardMaterial color="#3b82f6" />
+        </mesh>
+        {/* Cabin */}
+        <mesh position={[0, 0.9, -0.2]} castShadow>
+          <boxGeometry args={[1.6, 0.5, 1.8]} />
+          <meshStandardMaterial color="#3b82f6" />
+        </mesh>
+        {/* Windows */}
+        <mesh position={[0, 0.9, 0.1]}>
+          <boxGeometry args={[1.62, 0.4, 1.5]} />
+          <meshStandardMaterial color="#bae6fd" transparent opacity={0.6} />
+        </mesh>
+        {/* Lights */}
+        <mesh position={[0.6, 0.5, 1.51]}>
+          <boxGeometry args={[0.4, 0.2, 0.1]} />
+          <meshBasicMaterial color="white" />
+        </mesh>
+        <mesh position={[-0.6, 0.5, 1.51]}>
+          <boxGeometry args={[0.4, 0.2, 0.1]} />
+          <meshBasicMaterial color="white" />
+        </mesh>
+        {/* Wheels */}
+        <Wheel position={[0.9, 0.3, 1]} />
+        <Wheel position={[-0.9, 0.3, 1]} />
+        <Wheel position={[0.9, 0.3, -1]} />
+        <Wheel position={[-0.9, 0.3, -1]} />
+      </group>
+    );
+  }
+
+  if (data.type === 'TRUCK') {
+    return (
+      <group position={[laneX, 0, data.z]}>
+        {/* Trailer */}
+        <mesh position={[0, 2, -1]} castShadow>
+          <boxGeometry args={[2.2, 3.5, 7]} />
+          <meshStandardMaterial color="#f8fafc" />
+        </mesh>
+        {/* Cab */}
+        <mesh position={[0, 1.2, 3.5]} castShadow>
+          <boxGeometry args={[2.2, 2, 2]} />
+          <meshStandardMaterial color="#ef4444" />
+        </mesh>
+        {/* Windshield */}
+        <mesh position={[0, 1.6, 4.51]}>
+          <boxGeometry args={[2, 1, 0.1]} />
+          <meshStandardMaterial color="#1e293b" />
+        </mesh>
+        {/* Wheels */}
+        <Wheel position={[1, 0.3, 4]} />
+        <Wheel position={[-1, 0.3, 4]} />
+        <Wheel position={[1, 0.3, 2]} />
+        <Wheel position={[-1, 0.3, 2]} />
+        <Wheel position={[1, 0.3, -2]} />
+        <Wheel position={[-1, 0.3, -2]} />
+        <Wheel position={[1, 0.3, -4]} />
+        <Wheel position={[-1, 0.3, -4]} />
+      </group>
+    );
+  }
+
+  if (data.type === 'RAMP_TRUCK') {
+    return (
+      <group position={[laneX, 0, data.z]}>
+        {/* Cab */}
+        <mesh position={[0, 0.8, -1.8]} castShadow>
+          <boxGeometry args={[2, 1.5, 1.5]} />
+          <meshStandardMaterial color="#fbbf24" />
+        </mesh>
+        {/* Ramp */}
+        <mesh position={[0, 0.4, 1]} rotation={[-Math.PI * 0.12, 0, 0]} receiveShadow>
+          <boxGeometry args={[2.2, 0.3, 6]} />
+          <meshStandardMaterial color="#475569" />
+        </mesh>
+        {/* Wheels */}
+        <Wheel position={[1, 0.3, -1.5]} />
+        <Wheel position={[-1, 0.3, -1.5]} />
+        <Wheel position={[1, 0.3, 2.5]} />
+        <Wheel position={[-1, 0.3, 2.5]} />
+      </group>
+    );
+  }
+
+  return null;
 };
 
 const CoinMesh: React.FC<{ data: CoinData }> = ({ data }) => {

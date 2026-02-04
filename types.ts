@@ -7,7 +7,7 @@ export enum GameState {
 
 export interface ObstacleData {
   id: string;
-  type: 'BARRIER' | 'TRAIN' | 'RAMP';
+  type: 'CAR' | 'TRUCK' | 'RAMP_TRUCK';
   lane: number; // -1, 0, 1
   z: number;
 }
