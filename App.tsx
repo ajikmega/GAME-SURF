@@ -46,17 +46,19 @@ const App: React.FC = () => {
   }, []);
 
   const triggerAction = (action: string, e: React.PointerEvent) => {
-    e.preventDefault();
+    // Penting: mencegah behavior default agar input tidak terganggu
+    if (e.cancelable) e.preventDefault();
     e.stopPropagation();
     window.dispatchEvent(new CustomEvent('player-action', { detail: action }));
   };
 
   return (
-    <div className="relative w-full h-screen bg-black overflow-hidden select-none touch-none">
+    <div className="fixed inset-0 w-full h-full bg-black overflow-hidden select-none touch-none">
       <Canvas 
         shadows 
         dpr={[1, 1.2]} 
         gl={{ antialias: false, powerPreference: "high-performance" }}
+        style={{ width: '100%', height: '100%' }}
       >
         <PerspectiveCamera makeDefault position={[0, 6, 12]} fov={50} />
         <Sky sunPosition={[100, 20, 100]} />
@@ -89,17 +91,17 @@ const App: React.FC = () => {
         <>
           <HUD score={score} />
           
-          <div className="absolute inset-x-0 bottom-10 px-6 flex justify-between items-end pointer-events-none">
+          <div className="absolute inset-x-0 bottom-10 px-6 flex justify-between items-end pointer-events-none z-10">
             <div className="flex gap-4 pointer-events-auto">
               <button 
                 onPointerDown={(e) => triggerAction('left', e)}
-                className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center active:scale-90 active:bg-white/30 transition-all text-white text-3xl font-bold shadow-xl"
+                className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center active:scale-90 active:bg-white/30 transition-all text-white text-3xl font-bold shadow-xl"
               >
                 ←
               </button>
               <button 
                 onPointerDown={(e) => triggerAction('right', e)}
-                className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center active:scale-90 active:bg-white/30 transition-all text-white text-3xl font-bold shadow-xl"
+                className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center active:scale-90 active:bg-white/30 transition-all text-white text-3xl font-bold shadow-xl"
               >
                 →
               </button>
@@ -108,13 +110,13 @@ const App: React.FC = () => {
             <div className="flex flex-col gap-4 pointer-events-auto">
               <button 
                 onPointerDown={(e) => triggerAction('jump', e)}
-                className="w-20 h-20 rounded-full bg-blue-500/40 backdrop-blur-md border border-blue-400/30 flex items-center justify-center active:scale-90 active:bg-blue-500/60 transition-all text-white text-xl font-game shadow-xl"
+                className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-blue-500/40 backdrop-blur-md border border-blue-400/30 flex items-center justify-center active:scale-90 active:bg-blue-500/60 transition-all text-white text-xl font-game shadow-xl"
               >
                 UP
               </button>
               <button 
                 onPointerDown={(e) => triggerAction('slide', e)}
-                className="w-20 h-20 rounded-full bg-red-500/40 backdrop-blur-md border border-red-400/30 flex items-center justify-center active:scale-90 active:bg-red-500/60 transition-all text-white text-xs font-game shadow-xl"
+                className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-red-500/40 backdrop-blur-md border border-red-400/30 flex items-center justify-center active:scale-90 active:bg-red-500/60 transition-all text-white text-xs font-game shadow-xl"
               >
                 DOWN
               </button>
